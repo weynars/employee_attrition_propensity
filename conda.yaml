@@ -1,0 +1,9 @@
+name: employee_attrition
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.7
+  - pip=21.0.1
+  - pip:
+      - streamlit==1.19.0
