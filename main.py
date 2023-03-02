@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import joblib
 
-# import plotly.express as px
+import plotly.express as px
 import plotly.figure_factory as ff
 
 st.set_page_config(layout="wide")
@@ -89,7 +89,7 @@ with tab1:
     # Format table to print
     filtered_df['EmployeeID'] = filtered_df['EmployeeID'].astype(str)
     filtered_df = filtered_df.set_index('EmployeeID')
-    filtered_df[label] = filtered_df[col]
+    filtered_df[label] = round(filtered_df[col]*100,1)
 
     # Plot histogram
     fig = ff.create_distplot([df[col]], group_labels=[label], bin_size=0.05, show_rug=False, colors=['lightblue'])
@@ -100,16 +100,87 @@ with tab1:
     with col1:
         # Add historgram to streamlit
         st.subheader('Attrition Propesity Distribution')
+        n = filtered_df.shape[0]
+        total = df.shape[0]
+        st.write(f'**{n}** of the **{total}** employees have attrition propensity between **{values[0]}%** and **{values[1]}%**.')
         st.plotly_chart(fig, theme="streamlit", use_container_width=True)
 
     with col2:
         # Print table with top 100 at risk employees
-        st.subheader('Employees at Risk:')
+        st.subheader('Employees at Risk')
         st.write('Shows top 100 employees at risk of leaving within the selected attritiob propensity range filter.')
         # Center the dataframe
         with st.columns([1,3,1])[1]:
             st.dataframe(filtered_df[[label]].sort_values(label, ascending=False).head(100))
 
 with tab2:
-    st.write('EmployeeID')
+    employee_ids = df['EmployeeID'].unique()
+    employee_id = st.selectbox('Select Employee ID', employee_ids)
+
+    cond3 = df['EmployeeID'] == employee_id
+    employee_data = df[cond3]
+    employee_data.set_index('EmployeeID', inplace=True)
+    st.write(f'Employee **{employee_id}** has a propensity to leave of:', "**{:.2%}**".format(employee_data[col].iloc[0]))
+
+
+    # Show main contributors
+    preprocessor = model_pipeline[0]
+    model = model_pipeline[-1]
+
+    x_t = preprocessor.transform(employee_data[x_cols])
+    coefs = model.coef_[0]
+    intercept = model.intercept_
+    
+    # x_t[x_t == 0] -= 1
+    feature_impact = x_t * coefs
+    abs_feature_impact = np.abs(feature_impact)
+
+    # score = np.dot(x_t, coefs) + intercept
+    # propensity = 1 - 1./(1.+np.exp(score))
+    
+    # odds = np.exp(coefs)
+    
+    feature_names = preprocessor.get_feature_names_out()
+    feature_impact_df = pd.DataFrame(feature_impact.T,
+        columns=['feature_impact'],
+        index=feature_names,
+    )
+    feature_impact_df['abs_feature_impact'] = abs_feature_impact.T
+
+    st.header('Top attributes increasing employee\'s propensity to leave')
+
+    col1, col2 = st.columns([2, 1])
+
+    # TABLE - Show feature attributes
+    with col2:
+        st.subheader('Attributes')
+
+        # Top 10 features increasing propensity to leave
+        orig_features = [feature.split('__')[1].split('_')[0] for feature in feature_impact_df.index]
+        feature_impact_df['orig_features'] = orig_features
+        grouped_df = pd.DataFrame(feature_impact_df.groupby('orig_features').sum()['feature_impact'])
+        grouped_df['abs_feature_impact'] = np.abs(grouped_df['feature_impact'])
+        top_10_features = grouped_df.sort_values('abs_feature_impact',ascending=False).head(10)
+        
+        st.table(employee_data[top_10_features.index].T)
+
+    # CHART - Show relative impact on propensity score
+    with col1:
+        st.subheader('Impact on propensity to leave')
+        st.write('Positive values indicates the feature increases the attrition propensity and the negative values indicates a decrease in attrition propensity.')
+        top_10_features = top_10_features.reset_index()
+        top_10_features['Positive Impact'] = top_10_features['feature_impact'] > 0
+        top_10_features.rename({'orig_features':'Attribute', 'feature_impact': 'Feature Impact'}, axis=1, inplace=True)
+
+        # https://plotly.com/python/discrete-color/
+        discrete_colors = [ px.colors.qualitative.Plotly[index] for index in [2,1] ]
+        fig = px.bar(top_10_features, x="Feature Impact", y="Attribute", color='Positive Impact', orientation='h', height=600,
+            color_discrete_sequence=discrete_colors)
+        order_list = list(top_10_features['Attribute'].values)
+        order_list.reverse()
+        fig.update_yaxes(categoryorder='array', categoryarray= order_list)
+        fig.update_layout(showlegend=False)
+
+        st.plotly_chart(fig, theme="streamlit", use_container_width=True)
+
 
