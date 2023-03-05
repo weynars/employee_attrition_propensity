@@ -84,6 +84,7 @@ with tab1:
     # Apply filter
     cond1 = df[col] >= values[0]/100
     cond2 = df[col] <= values[1]/100
+    df['Selected Group'] = cond1&cond2
     filtered_df = df[cond1&cond2]
     # Format table to print
     filtered_df['EmployeeID'] = filtered_df['EmployeeID'].astype(str)
@@ -111,6 +112,71 @@ with tab1:
         # Center the dataframe
         with st.columns([1,3,1])[1]:
             st.dataframe(filtered_df[[label]].sort_values(label, ascending=False).head(100))
+
+    st.subheader('Selected group versus overall employee attributes')
+
+    # Categorical plots
+    col1, col2, col3 = st.columns(3)
+
+    def plot_categorical_col(df, col, col_values):
+        crosstab_df = pd.crosstab(df['Selected Group'], df[col], normalize='index').reset_index()
+        melt_df = crosstab_df.melt(id_vars=['Selected Group'], value_vars=col_values, value_name='Proportion of Employees')
+
+        fig = px.bar(melt_df, x=col, y='Proportion of Employees', color='Selected Group', barmode='group')
+        st.plotly_chart(fig, theme="streamlit", use_container_width=True)
+
+    with col1:
+        # OverTime
+        st.subheader('Overt Time')
+        st.write('Employees with high attrition propensity are more likely to be working overtime')
+        plot_categorical_col(df=df, col='OverTime', col_values=['No', 'Yes'])
+
+    with col2:
+        # JobInvolvement
+        st.subheader('Job Involvement')
+        st.write('Employees with high attrition propensity have lower job involvement')
+        plot_categorical_col(df=df, col='JobInvolvement', col_values=[1,2,3,4])
+
+    with col3:
+        # WorkLifeBalance
+        st.subheader('Work Life Balance')
+        st.write('Employees with high attrition propensity have lower work life balance')
+        plot_categorical_col(df=df, col='WorkLifeBalance', col_values=[1,2,3,4])
+
+    # Numerical plots
+    col1, col2, col3 = st.columns(3)
+
+    def plot_numerical_col(df, col):
+        cond1 = df['Selected Group'] == True
+        cond2 = df['Selected Group'] == False
+
+        # Plot density curve for each group
+        fig = ff.create_distplot([df[cond1][col], df[cond2][col]], group_labels=['Selected Employees', 'Remaining Employees']
+            , show_rug=False, show_hist=False)
+
+        # Add axis labels
+        fig.update_xaxes(title=col)
+        fig.update_yaxes(title='Density')
+
+        st.plotly_chart(fig, theme="streamlit", use_container_width=True)
+
+    with col1:
+        # Distance from home
+        st.subheader('Distance From Home')
+        st.write('Employees with high attrition propensity tend to live further away')
+        plot_numerical_col(df=df, col='DistanceFromHome')
+
+    with col2:
+        # Total working years
+        st.subheader('Total Working Years')
+        st.write('Employees with high attrition propensity tend to be less tenured')
+        plot_numerical_col(df=df, col='TotalWorkingYears')
+
+    with col3:
+        # Age
+        st.subheader('Age')
+        st.write('Employees with high attrition propensity tend to be younger')
+        plot_numerical_col(df=df, col='Age')
 
 # Employee Risk
 with tab2:
